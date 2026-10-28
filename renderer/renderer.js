@@ -57,27 +57,50 @@
 
   function esc(s) { return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-  // minimal, safe markdown: fenced code, bullets, inline code, bold, paragraphs
+  // minimal, safe markdown: fenced code, bullets, numbered lists, headings, inline code, bold, paragraphs
   function renderMarkdown(text) {
     const lines = text.split('\n');
-    let html = '', inCode = false, inList = false, buf = [];
+    let html = '', inCode = false, listType = null, buf = [];
+    const closeList = () => { if (listType) { html += listType === 'ol' ? '</ol>' : '</ul>'; listType = null; } };
     const flushP = () => { if (buf.length) { html += '<p>' + inline(buf.join(' ')) + '</p>'; buf = []; } };
+    const openList = (type) => {
+      if (listType === type) return;
+      closeList();
+      html += type === 'ol' ? '<ol>' : '<ul>';
+      listType = type;
+    };
     const inline = (s) => esc(s)
       .replace(/`([^`]+)`/g, '<code>$1</code>')
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     for (const raw of lines) {
       const line = raw;
       if (/^```/.test(line.trim())) {
-        if (!inCode) { flushP(); if (inList) { html += '</ul>'; inList = false; } html += '<pre><code>'; inCode = true; }
+        if (!inCode) { flushP(); closeList(); html += '<pre><code>'; inCode = true; }
         else { html += '</code></pre>'; inCode = false; }
         continue;
       }
       if (inCode) { html += esc(line) + '\n'; continue; }
-      if (/^\s*[-*]\s+/.test(line)) { flushP(); if (!inList) { html += '<ul>'; inList = true; } html += '<li>' + inline(line.replace(/^\s*[-*]\s+/, '')) + '</li>'; continue; }
-      if (line.trim() === '') { flushP(); if (inList) { html += '</ul>'; inList = false; } continue; }
+      const heading = /^(#{1,3})\s+(.+)$/.exec(line.trim());
+      if (heading) {
+        flushP(); closeList();
+        const level = heading[1].length;
+        html += '<h' + level + '>' + inline(heading[2]) + '</h' + level + '>';
+        continue;
+      }
+      if (/^\s*[-*]\s+/.test(line)) {
+        flushP(); openList('ul');
+        html += '<li>' + inline(line.replace(/^\s*[-*]\s+/, '')) + '</li>';
+        continue;
+      }
+      if (/^\s*\d+\.\s+/.test(line)) {
+        flushP(); openList('ol');
+        html += '<li>' + inline(line.replace(/^\s*\d+\.\s+/, '')) + '</li>';
+        continue;
+      }
+      if (line.trim() === '') { flushP(); closeList(); continue; }
       buf.push(line.trim());
     }
-    flushP(); if (inList) html += '</ul>'; if (inCode) html += '</code></pre>';
+    flushP(); closeList(); if (inCode) html += '</code></pre>';
     return html;
   }
 
@@ -100,24 +123,29 @@
     messages.appendChild(aiEl);
   }
 
+  function paintAi(raw, withCaret) {
+    if (!aiEl) return;
+    aiEl.innerHTML = renderMarkdown(raw || '');
+    if (withCaret) {
+      caretEl = document.createElement('span');
+      caretEl.className = 'ai-caret';
+      aiEl.appendChild(caretEl);
+    } else {
+      caretEl = null;
+    }
+  }
+
   function appendToken(t) {
     if (!aiEl) startAi(false);
     aiEl.dataset.raw += t;
-    const span = document.createElement('span');
-    span.className = 'w';
-    span.textContent = t;
-    // Guard: caretEl must be a child of aiEl
-    if (caretEl && caretEl.parentNode === aiEl) {
-      aiEl.insertBefore(span, caretEl);
-    } else {
-      aiEl.appendChild(span);
-    }
+    // Re-render markdown while streaming so code fences / lists stay readable
+    // instead of dumping everything as one oversized inline run.
+    paintAi(aiEl.dataset.raw, true);
   }
 
   function finalizeAi() {
     if (!aiEl) return;
-    const raw = aiEl.dataset.raw || '';
-    aiEl.innerHTML = renderMarkdown(raw);
+    paintAi(aiEl.dataset.raw || '', false);
     aiEl = null; caretEl = null;
   }
 
@@ -1354,6 +1382,67 @@
     });
   });
 
+  // Profile: upload résumé/CV (PDF/DOCX/TXT) into the textarea; AI reads that text.
+  const resumeUploadBtn = $('#resume-upload');
+  if (resumeUploadBtn) {
+    resumeUploadBtn.addEventListener('click', async () => {
+      const status = $('#profile-status');
+      if (!cue.pickProfileDocument) {
+        if (status) status.textContent = 'Upload is unavailable in this build.';
+        return;
+      }
+      resumeUploadBtn.disabled = true;
+      if (status) status.textContent = 'Opening file picker…';
+      try {
+        const res = await cue.pickProfileDocument();
+        if (!res || res.canceled) {
+          if (status) status.textContent = profileStatusText();
+          return;
+        }
+        if (res.error) {
+          if (status) status.textContent = 'Could not read file: ' + res.error;
+          return;
+        }
+        const text = (res.text || '').trim();
+        if (!text) {
+          if (status) status.textContent = 'That file had no readable text. Try another PDF/DOCX/TXT.';
+          return;
+        }
+        $('#resume-text').value = text;
+        settings.resumeText = text;
+        settings.resumeFileName = res.fileName || '';
+        const nameEl = $('#resume-file-name');
+        if (nameEl) nameEl.textContent = settings.resumeFileName || 'Uploaded';
+        if (status) status.textContent = 'Loaded ' + (settings.resumeFileName || 'resume') + ' · ' + text.length.toLocaleString() + ' characters.';
+      } catch (e) {
+        if (status) status.textContent = 'Upload failed: ' + ((e && e.message) || String(e));
+      } finally {
+        resumeUploadBtn.disabled = false;
+      }
+    });
+  }
+  const resumeClearBtn = $('#resume-clear');
+  if (resumeClearBtn) {
+    resumeClearBtn.addEventListener('click', () => {
+      const resumeText = $('#resume-text');
+      if (resumeText) resumeText.value = '';
+      settings.resumeText = '';
+      settings.resumeFileName = '';
+      const nameEl = $('#resume-file-name');
+      if (nameEl) nameEl.textContent = 'No file uploaded';
+      const status = $('#profile-status');
+      if (status) status.textContent = profileStatusText();
+    });
+  }
+  const targetRoleSelect = $('#target-role');
+  if (targetRoleSelect) {
+    targetRoleSelect.addEventListener('change', () => {
+      settings.targetRole = targetRoleSelect.value || '';
+      const status = $('#profile-status');
+      if (status) status.textContent = profileStatusText();
+    });
+  }
+
   function updateCustomProviderFields() {
     const provider = settings.provider;
     document.querySelectorAll('[data-key-for]').forEach((el) => {
@@ -1501,11 +1590,35 @@
     if (slidesEnabled) slidesEnabled.checked = !!slidesCfg.enabled;
     const slidesInterval = $('#slides-interval');
     if (slidesInterval) slidesInterval.value = slidesCfg.intervalMs || 3000;
+    // Profile tab
+    const resumeText = $('#resume-text');
+    if (resumeText) resumeText.value = settings.resumeText || '';
+    const resumeFileName = $('#resume-file-name');
+    if (resumeFileName) {
+      resumeFileName.textContent = settings.resumeFileName
+        ? settings.resumeFileName
+        : (settings.resumeText ? 'Pasted text (no file)' : 'No file uploaded');
+    }
+    const targetRole = $('#target-role');
+    if (targetRole) targetRole.value = settings.targetRole || '';
+    const jobDescription = $('#job-description');
+    if (jobDescription) jobDescription.value = settings.jobDescription || '';
+    const profileStatus = $('#profile-status');
+    if (profileStatus) profileStatus.textContent = profileStatusText();
     // Style tab
     $('#ai-rules').value = settings.aiRules || '';
     updateAiRulesCounter();
     // Appearance tab
     applyOpacity(settings.opacity, false);
+  }
+
+  function profileStatusText() {
+    const hasResume = !!(settings.resumeText && settings.resumeText.trim());
+    const role = (settings.targetRole || '').trim();
+    if (!hasResume && !role) return 'Add a résumé and pick a role so interview answers stay personal and focused.';
+    if (hasResume && role) return 'Résumé loaded · focused on ' + role + '.';
+    if (hasResume) return 'Résumé loaded · pick a target role to focus answers.';
+    return 'Target role set · upload a résumé so answers can cite your real experience.';
   }
 
   // Whoever cue has been told it may answer questions for. Empty is the normal
@@ -1770,6 +1883,20 @@
       const v = Number.parseInt(slidesIntervalEl.value, 10) || 3000;
       settings.slides.intervalMs = Math.max(1500, Math.min(15000, v));
     }
+    // Profile tab
+    const resumeTextEl = $('#resume-text');
+    if (resumeTextEl) {
+      const nextResume = resumeTextEl.value.trim();
+      // If the user edits/clears the textarea after an upload, drop the file label.
+      if (!nextResume) settings.resumeFileName = '';
+      else if (nextResume !== (settings.resumeText || '').trim()) settings.resumeFileName = settings.resumeFileName || '';
+      settings.resumeText = nextResume;
+    }
+    const targetRoleEl = $('#target-role');
+    if (targetRoleEl) settings.targetRole = targetRoleEl.value || '';
+    const jobDescriptionEl = $('#job-description');
+    if (jobDescriptionEl) settings.jobDescription = jobDescriptionEl.value.trim();
+    // resumeFileName is set by the upload handler; keep whatever is on settings.
     // Style tab
     settings.aiRules = $('#ai-rules').value.trim();
     // Appearance tab

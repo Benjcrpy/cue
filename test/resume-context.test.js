@@ -114,7 +114,7 @@ test('buildInterviewContext: leetcode returns null', () => {
 });
 
 test('buildInterviewContext: returns null with no settings data', () => {
-  const empty = { resumeText: '', jobDescription: '', starStories: '', whyCompany: '', whyLeaving: '', workStyle: '', salaryTarget: '', questionsToAsk: '' };
+  const empty = { resumeText: '', targetRole: '', jobDescription: '', starStories: '', whyCompany: '', whyLeaving: '', workStyle: '', salaryTarget: '', questionsToAsk: '' };
   assert.equal(buildInterviewContext(empty, 'say', [{ channel: 'them', text: 'Tell me about yourself.' }]), null);
 });
 
@@ -122,4 +122,27 @@ test('buildInterviewContext: JD tailor note included when JD is set', () => {
   const ctx = buildInterviewContext(fullSettings, 'say', []);
   assert.ok(ctx !== null);
   assert.ok(ctx.includes('Tailor'), 'should include tailor note when JD is set');
+});
+
+test('buildInterviewContext: targetRole focuses answers on the selected role', () => {
+  const ctx = buildInterviewContext({
+    resumeText: 'Jane Doe\nBackend engineer\n\nSkills\nPython, Go\n\nExperience\nPayCo payments pipeline',
+    targetRole: 'Backend Engineer',
+    jobDescription: ''
+  }, 'say', []);
+  assert.ok(ctx !== null);
+  assert.match(ctx, /Target Role Focus/);
+  assert.match(ctx, /Backend Engineer/);
+  assert.match(ctx, /authoritative résumé data/i);
+  assert.match(ctx, /Tailor every answer to the target role/);
+});
+
+test('buildInterviewContext: targetRole alone is enough context without a résumé', () => {
+  const ctx = buildInterviewContext({
+    resumeText: '',
+    targetRole: 'Product Manager',
+    jobDescription: ''
+  }, 'assist', []);
+  assert.ok(ctx !== null);
+  assert.match(ctx, /Product Manager/);
 });

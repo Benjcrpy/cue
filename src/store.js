@@ -55,8 +55,12 @@ const DEFAULTS = {
     cardShown: false,         // the first-run card (CONTRACT §12.1) was shown for the current starter grant
     lastError: ''
   },
-  // Tab 2: Profile
+  // Tab 2: Profile — résumé text (paste or uploaded PDF/DOCX) plus the role
+  // the candidate is interviewing for. Both feed buildInterviewContext so
+  // answers stay grounded in real experience and focused on that role.
   resumeText: '',
+  resumeFileName: '',
+  targetRole: '',
   jobDescription: '',
   // Tab 3: Interview Prep
   starStories: '',       // 3-5 behavioral STAR stories in plain English

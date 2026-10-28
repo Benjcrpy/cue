@@ -2,12 +2,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { MODES } = require('../src/prompts');
 
-test('assist mode gives a direct answer in first person', () => {
+test('assist mode gives a direct answer in first person for spoken interview replies', () => {
   const system = MODES.assist.buildSystem(null);
   const text = system + '\n' + MODES.assist.build({ transcript: [], userText: '' });
-  // System prompt must instruct to answer in first person with no preamble
+  // Spoken interview answers stay first person; coding is an explicit exception.
   assert.match(text, /first person/i);
   assert.match(text, /no preamble|preamble/i);
+  assert.match(system, /Do NOT answer in first person/i);
+  assert.match(text, /fenced code block/i);
 });
 
 test('say mode produces a spoken answer not a question', () => {
@@ -22,6 +24,29 @@ test('leetcode mode ignores context block and returns coding prompt', () => {
   const system = MODES.leetcode.buildSystem('IGNORED_CONTEXT');
   assert.match(system, /competitive programmer|coding problem/i);
   assert.ok(!system.includes('IGNORED_CONTEXT'), 'leetcode should not include context block');
+});
+
+test('leetcode mode demands a fenced solution and forbids tests-only answers', () => {
+  const system = MODES.leetcode.buildSystem(null);
+  const user = MODES.leetcode.build();
+  assert.match(system, /fenced code block/i);
+  assert.match(system, /Do NOT answer with only example inputs|sample test cases|assertions/i);
+  assert.match(system, /Do NOT paste the problem'?s Examples|Testcases/i);
+  assert.match(system, /lead with a fenced code block|COMPLETE working solution/i);
+  assert.match(user, /COMPLETE full working solution|fenced code block first/i);
+});
+
+test('coding modes support every common language and follow the language on screen', () => {
+  const leet = MODES.leetcode.buildSystem(null);
+  const assist = MODES.assist.buildSystem(null);
+  const ask = MODES.ask.buildSystem(null);
+  for (const [name, system] of [['leetcode', leet], ['assist', assist], ['ask', ask]]) {
+    assert.match(system, /detect the programming language/i, `${name} must detect language from the screen`);
+    assert.match(system, /Python, Java, C\+\+|JavaScript, TypeScript, Go, Rust/i, `${name} must list major languages`);
+    assert.match(system, /Only default to Python when the language truly cannot be determined/i, `${name} must not force Python`);
+  }
+  assert.match(leet, /Never force Python when another language is selected/i);
+  assert.match(MODES.leetcode.build(), /same programming language shown on screen/i);
 });
 
 test('recap is grounded in the transcript and does not presume an interview', () => {
@@ -82,4 +107,12 @@ test('leetcode mode never applies AI rules (coding answers stay strict)', () => 
   assert.ok(!withRules.includes('USER RULES'), 'leetcode must not include USER RULES');
   assert.ok(!withRules.includes(RULES), 'leetcode must not leak user rules into the prompt');
   assert.match(withRules, /competitive programmer/);
+});
+
+test('assist mode tells the model coding answers need a fenced solution, not examples', () => {
+  const system = MODES.assist.buildSystem(null);
+  const user = MODES.assist.build({ transcript: [], userText: '' });
+  assert.match(system, /fenced code block/i);
+  assert.match(system, /not examples\/tests|not examples or tests/i);
+  assert.match(user, /full working solution in a fenced code block/i);
 });

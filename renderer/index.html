@@ -113,6 +113,7 @@
       <!-- Tab bar -->
       <div class="s-tabs">
         <button class="s-tab on" data-tab="keys">🔑 API Keys</button>
+        <button class="s-tab" data-tab="profile">📄 Profile</button>
         <button class="s-tab" data-tab="transcription">🔉 Audio</button>
         <button class="s-tab" data-tab="style">✨ Style</button>
         <button class="s-tab" data-tab="appearance">🌗 Appearance</button>
@@ -197,6 +198,46 @@
         <div class="s-callers" id="applink-callers"></div>
 
         <div class="s-status" id="s-status"></div>
+      </div>
+
+      <!-- Tab: Profile — résumé/CV + target role guide the interview answers -->
+      <div class="s-body s-tab-pane hidden" data-pane="profile">
+        <label class="s-label">Resume / CV <span class="s-hint">PDF, DOCX, or TXT · stored locally</span></label>
+        <div class="whisper-actions profile-upload-row">
+          <button type="button" id="resume-upload" class="s-action primary">Upload resume / CV…</button>
+          <button type="button" id="resume-clear" class="s-action danger">Clear</button>
+          <span id="resume-file-name" class="profile-file-name">No file uploaded</span>
+        </div>
+        <textarea id="resume-text" rows="9" spellcheck="false" placeholder="Paste your résumé here, or upload a PDF / DOCX / TXT above. cue uses this as factual background for interview answers — employers, skills, dates, and metrics."></textarea>
+        <div class="s-note">cue reads this text and grounds answers in your real experience. It never invents employers, titles, or achievements that are not here.</div>
+
+        <label class="s-label" for="target-role">Target role <span class="s-hint">what you are interviewing for</span></label>
+        <select id="target-role" class="s-select">
+          <option value="">Select a role…</option>
+          <option value="Software Engineer">Software Engineer</option>
+          <option value="Frontend Engineer">Frontend Engineer</option>
+          <option value="Backend Engineer">Backend Engineer</option>
+          <option value="Full Stack Engineer">Full Stack Engineer</option>
+          <option value="Mobile Engineer">Mobile Engineer</option>
+          <option value="DevOps / SRE">DevOps / SRE</option>
+          <option value="Data Engineer">Data Engineer</option>
+          <option value="Data Scientist">Data Scientist</option>
+          <option value="Machine Learning Engineer">Machine Learning Engineer</option>
+          <option value="QA / Test Engineer">QA / Test Engineer</option>
+          <option value="Security Engineer">Security Engineer</option>
+          <option value="Product Manager">Product Manager</option>
+          <option value="Product Designer / UX">Product Designer / UX</option>
+          <option value="Engineering Manager">Engineering Manager</option>
+          <option value="Other">Other</option>
+        </select>
+        <div class="s-note">Answers stay focused on this role — skills and stories from your résumé that fit it are preferred.</div>
+
+        <label class="s-label" for="job-description">Job description <span class="s-hint">optional · paste the posting</span></label>
+        <textarea id="job-description" rows="5" spellcheck="false" placeholder="Paste the job posting or a short role brief for tighter fit (stack, responsibilities, must-haves)."></textarea>
+        <div class="s-hint-block">
+          Resume + role guide cue like a briefing pack: <strong>what</strong> you’ve done comes from the résumé; <strong>which angle</strong> to emphasize comes from the role (and job description if you add one). Coding-problem solves ignore this so solutions stay strict.
+        </div>
+        <div class="s-status" id="profile-status"></div>
       </div>
 
       <!-- Tab: Transcription -->

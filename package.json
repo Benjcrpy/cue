@@ -47,5 +47,8 @@
     "openai": "^4.73.0",
     "pdf-parse": "^1.1.1",
     "ws": "^8.18.0"
+  },
+  "allowScripts": {
+    "electron@33.2.1": true
   }
 }

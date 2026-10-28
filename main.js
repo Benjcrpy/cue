@@ -813,7 +813,10 @@ async function runFeature(mode, userText) {
           : process.platform === 'win32'
             ? 'Screen capture failed. Make sure cue is not blocked by Windows privacy or security software, then try again.'
             : 'Screen capture failed. Check your desktop capture permissions, then try again.';
-        send('status', { message });
+        // Coding / screen modes cannot invent a solution without the image —
+        // abort instead of answering blind (which looked like "no full code").
+        send('llm:error', { message });
+        return;
       }
     }
 
@@ -850,11 +853,15 @@ async function runFeature(mode, userText) {
       rearm();
     });
     try {
+      // Screen + coding modes need room for a full solution; the default 700/1400
+      // budget truncates mid-function and looks like "no full code".
+      const wantsCodingBudget = mode === 'leetcode' || mode === 'assist' || mode === 'ask' || !!imageDataUrl;
       await Promise.race([
         llm.stream({
           system,
           turns: [{ role: 'user', text: built }],
           imageDataUrl,
+          maxTokens: wantsCodingBudget ? llm.codingMaxTokens : llm.maxTokens,
           onToken: (t) => { if (streamSettled) return; rearm(); send('llm:token', { text: t }); },
           onResponse: settings.provider === publik.PUBLIK_PROVIDER ? (res) => publikNoteHeaders(res && res.headers) : undefined
         }),
@@ -1173,7 +1180,7 @@ ipcMain.on('log', (_e, msg) => console.log('[renderer]', msg));
 async function pickAndParseDocument() {
   const res = await dialog.showOpenDialog(win, {
     properties: ['openFile'],
-    filters: [{ name: 'Resume / Job description', extensions: ['pdf', 'docx'] }]
+    filters: [{ name: 'Resume / CV', extensions: ['pdf', 'docx', 'txt', 'md'] }]
   });
   if (res.canceled || !res.filePaths.length) return null;
   const filePath = res.filePaths[0];

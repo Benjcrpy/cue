@@ -516,12 +516,17 @@ function createLLM(settings) {
   }
 
   const ready = !configurationError && !!model;
+  // Spoken interview replies stay short; coding solutions need a much larger
+  // budget or the model cuts off mid-function (700 tokens is often only a stub).
   const maxTokens = settings.smart ? 1400 : 700;
+  const codingMaxTokens = settings.smart ? 4096 : 3200;
 
   return {
     provider, model, apiKey, baseURL,
     ready,
     configurationError,
+    maxTokens,
+    codingMaxTokens,
     async stream(params) {
       if (!ready) throw new Error(configurationError || `Complete the ${provider} provider settings.`);
       const args = { apiKey, baseURL, endpoint, model, maxTokens, thinking: !!settings.smart, ...params, turns: sanitizeTurns(params.turns) };

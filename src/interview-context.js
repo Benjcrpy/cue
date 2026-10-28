@@ -155,7 +155,23 @@ function buildResumeBlock(resumeText, limit = 2400) {
 
 function buildJDBlock(jd, limit = 600) {
   if (!jd || !jd.trim()) return '';
-  return 'Target Role / Job Description:\n' + clip(jd.trim().replace(/\s+/g, ' '), limit);
+  return 'Job Description / Role Details:\n' + clip(jd.trim().replace(/\s+/g, ' '), limit);
+}
+
+function buildRoleFocusBlock(targetRole, jd) {
+  const role = typeof targetRole === 'string' ? targetRole.trim() : '';
+  if (!role && !(jd && jd.trim())) return '';
+  const parts = ['=== Target Role Focus ==='];
+  if (role) {
+    parts.push('The candidate is interviewing for: ' + role + '.');
+    parts.push(
+      'Focus every spoken answer on what this role cares about. ' +
+      'Pull matching experience, skills, projects, and metrics from the résumé above. ' +
+      'Prefer facts that demonstrate fit for ' + role + '. Do not invent employers, titles, or achievements.'
+    );
+  }
+  if (jd && jd.trim()) parts.push(buildJDBlock(jd, role ? 500 : 600));
+  return parts.join('\n');
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -171,17 +187,19 @@ function buildInterviewContext(settings, mode, transcript) {
 
   const category = detectCategory(transcript || []);
 
-  const resume    = settings.resumeText || '';
-  const jd        = settings.jobDescription || '';
-  const stories   = settings.starStories || '';
-  const whyCo     = settings.whyCompany || '';
-  const whyLeave  = settings.whyLeaving || '';
-  const workStyle = settings.workStyle || '';
-  const salary    = settings.salaryTarget || '';
-  const questions = settings.questionsToAsk || '';
+  const resume     = settings.resumeText || '';
+  const targetRole = settings.targetRole || '';
+  const jd         = settings.jobDescription || '';
+  const stories    = settings.starStories || '';
+  const whyCo      = settings.whyCompany || '';
+  const whyLeave   = settings.whyLeaving || '';
+  const workStyle  = settings.workStyle || '';
+  const salary     = settings.salaryTarget || '';
+  const questions  = settings.questionsToAsk || '';
 
   const hasResume  = resume.trim().length > 0;
   const hasStories = stories.trim().length > 0;
+  const hasRole    = targetRole.trim().length > 0;
   const hasJD      = jd.trim().length > 0;
 
   const blocks = [];
@@ -190,13 +208,17 @@ function buildInterviewContext(settings, mode, transcript) {
   if (hasResume) {
     const resumeLimit = (category === 'behavioral' || category === 'experience') ? 2400 : 1400;
     const rb = buildResumeBlock(resume, resumeLimit);
-    if (rb) blocks.push('=== Your Background ===\n' + rb);
+    if (rb) {
+      blocks.push(
+        '=== Your Background (authoritative résumé data — extract names, roles, skills, dates, and metrics from this) ===\n' +
+        rb
+      );
+    }
   }
 
-  // Job description — always include when available
-  if (hasJD) {
-    blocks.push(buildJDBlock(jd, category === 'technical' ? 300 : 600));
-  }
+  // Target role + optional JD — always include when available so answers stay role-focused
+  const roleBlock = buildRoleFocusBlock(targetRole, hasJD ? jd : '');
+  if (roleBlock) blocks.push(roleBlock);
 
   // Category-specific injections
   switch (category) {
@@ -253,9 +275,13 @@ function buildInterviewContext(settings, mode, transcript) {
 
   if (!blocks.length) return null;
 
-  const tailorNote = hasJD
-    ? '\nTailor every answer to highlight fit with the target role above.'
-    : '';
+  const tailorNote = (hasRole || hasJD)
+    ? '\nTailor every answer to the target role above' +
+      (hasRole ? ` (${targetRole.trim()})` : '') +
+      '. Ground claims in the résumé; if a detail is missing, say the résumé does not provide it.'
+    : (hasResume
+      ? '\nGround personal claims in the résumé above; if a detail is missing, say the résumé does not provide it.'
+      : '');
 
   return blocks.join('\n\n') + tailorNote;
 }
@@ -279,4 +305,10 @@ function buildResumeContext(resumeText, jobDescription, mode) {
   return parts.join('\n\n');
 }
 
-module.exports = { buildInterviewContext, buildResumeContext, detectCategory, parseResume };
+module.exports = {
+  buildInterviewContext,
+  buildResumeContext,
+  buildRoleFocusBlock,
+  detectCategory,
+  parseResume
+};

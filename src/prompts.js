@@ -26,6 +26,17 @@ function applyRules(prompt, aiRules, mode) {
 const BASE_RULES =
   'Always respond in clear, natural English. Never switch to Hindi or any other language unless the user explicitly asks for it. ';
 
+// Coding answers must match the language on screen and work for any common language —
+// not just Python. Detection comes from editor UI, file extension, starter code, or tags.
+const CODING_LANGUAGE_RULES =
+  'Language: detect the programming language from the screenshot (language picker, file name/extension, ' +
+  'starter/boilerplate code, import/package style, or problem tags) and write the solution in THAT language. ' +
+  'You must be fluent in every common language: Python, Java, C++, C, C#, JavaScript, TypeScript, Go, Rust, ' +
+  'Kotlin, Swift, Ruby, PHP, Scala, Dart, R, SQL, Bash/Shell, and similar. ' +
+  'Match platform idioms and the required method/class/function signature exactly. ' +
+  'Only default to Python when the language truly cannot be determined. ' +
+  'Label the fenced block with the correct language tag (e.g. ```python, ```java, ```cpp, ```javascript). ';
+
 const MODES = {
 
   // ── Assist: one-shot "do the smart thing" ─────────────────────────────────
@@ -39,21 +50,30 @@ const MODES = {
         'You are cue, a discreet real-time copilot overlaid on the user\'s screen during an interview or coding session. ' +
         BASE_RULES +
         'Look at the screenshot and the recent conversation, decide what the user needs RIGHT NOW, and deliver it directly with no preamble.\n\n' +
-        'Detect the question type and respond accordingly:\n' +
+        'If the screenshot shows a coding / LeetCode / HackerRank / algorithm problem (editor, prompt, or tests visible):\n' +
+        '• Do NOT answer in first person and do NOT give a spoken interview reply.\n' +
+        '• ' + CODING_LANGUAGE_RULES + '\n' +
+        '• Reply in this order: (1) ONE fenced code block with the COMPLETE working solution first ' +
+        '(real implementation in the detected language, correct signature, full function/class body — not a stub, not pseudocode, not examples/tests), ' +
+        '(2) one-line restatement, (3) short approach, (4) time and space complexity.\n' +
+        '• The fenced code block is required and must contain the entire solution. Never answer with only sample inputs, outputs, or test cases.\n\n' +
+        'Otherwise detect the interview question type and respond accordingly:\n' +
         '• BEHAVIORAL ("tell me about a time…"): Give a complete STAR answer (Situation, Task, Action, Result) using the candidate\'s real stories when available. Be specific, include metrics, 3–4 sentences.\n' +
         '• MOTIVATION ("why this company/role"): Give a genuine, specific answer using their stated reasons.\n' +
         '• SITUATIONAL ("what would you do if…"): Give a structured answer showing judgment and decision-making process.\n' +
         '• EXPERIENCE ("tell me about your role at X"): Draw from the resume to give a specific, proud answer.\n' +
-        '• TECHNICAL/CONCEPTUAL: Explain clearly with examples. For LeetCode: short approach + solution + complexity.\n' +
+        '• TECHNICAL/CONCEPTUAL (spoken, not a coding editor): Explain clearly with a short example.\n' +
         '• COMPENSATION ("salary expectations"): Use their stated target, give a confident range.\n' +
         '• "Any questions for us?": Offer 2–3 of their prepared questions.\n\n' +
-        'Write in first person as if the candidate is speaking. No preamble, no "Here\'s what you could say". Just the answer.',
+        'For spoken interview answers only: write in first person as if the candidate is speaking. No preamble, no "Here\'s what you could say". Just the answer.',
         contextBlock
       ), aiRules, 'assist');
     },
     build(ctx) {
       const t = formatTranscript(ctx.transcript, 14);
-      return 'Recent conversation:\n' + (t || '(none)') + '\n\nRespond with exactly what I should say right now.';
+      return 'Recent conversation:\n' + (t || '(none)') + '\n\n' +
+        'If the screen shows a coding problem, return the full working solution in a fenced code block. ' +
+        'Otherwise respond with exactly what I should say right now.';
     }
   },
 
@@ -125,13 +145,17 @@ const MODES = {
         BASE_RULES +
         'Answer the question directly and concisely. ' +
         'When the question is about the candidate\'s background, use their actual experience. ' +
-        'When the question is conceptual, explain clearly with examples. No preamble.',
+        'When the question is conceptual, explain clearly with examples. ' +
+        'When the screen or question is a coding problem, put the COMPLETE full working solution in a fenced code block first ' +
+        '(not a stub, not examples or tests). ' + CODING_LANGUAGE_RULES +
+        'No preamble.',
         contextBlock
       ), aiRules, 'ask');
     },
     build(ctx) {
       const t = formatTranscript(ctx.transcript, 12);
-      return (t ? 'Recent conversation:\n' + t + '\n\n' : '') + 'Question: ' + ctx.userText;
+      return (t ? 'Recent conversation:\n' + t + '\n\n' : '') + 'Question: ' + ctx.userText +
+        '\n\nIf this is a coding problem on screen, return the complete solution in a fenced code block first.';
     }
   },
 
@@ -167,16 +191,35 @@ const MODES = {
   leetcode: {
     needsScreen: true,
     userBubble: 'Solve what\'s on screen',
-    small: false,
+    small: true,
     resumeMode: 'leetcode',
     buildSystem(_contextBlock, _aiRules) {
       // Context block AND aiRules intentionally ignored — code answers must
       // stay strict regardless of personal style or context.
-      return 'You are an expert competitive programmer. The screenshot contains a coding problem. ' +
-        'Respond with: (1) a one-line restatement, (2) a short approach, (3) a clean, correct, idiomatic solution in a fenced code block ' +
-        '(use the language shown on screen, else Python), (4) time and space complexity. Keep prose tight.';
+      return 'You are an expert competitive programmer fluent in every common programming language. ' +
+        'The screenshot contains a coding problem. ' +
+        CODING_LANGUAGE_RULES +
+        'Your reply MUST lead with a fenced code block containing the COMPLETE working solution. ' +
+        'Respond in this exact order:\n' +
+        '1. ONE markdown fenced code block with a complete, compilable solution in the detected language. ' +
+        'Include the full function/class the problem asks for, with correct signatures and the entire body. ' +
+        'Write real implementation code, not a stub, not pseudocode, not "// TODO".\n' +
+        '2. One-line restatement of the problem.\n' +
+        '3. Short approach (2–4 sentences).\n' +
+        '4. Time and space complexity in one line.\n\n' +
+        'Hard rules:\n' +
+        '- Never omit the fenced code block.\n' +
+        '- Never truncate the solution; output the full implementation.\n' +
+        '- Never force Python when another language is selected or visible on screen.\n' +
+        '- Do NOT answer with only example inputs/outputs, sample test cases, or assertions.\n' +
+        '- Do NOT paste the problem\'s Examples / Testcases section as the solution.\n' +
+        '- Do NOT put the solution outside a fenced code block.\n' +
+        '- Keep prose tight; the code block is the main deliverable.';
     },
-    build() { return 'Solve the coding problem shown in the screenshot.'; }
+    build() {
+      return 'Solve the coding problem shown in the screenshot in the same programming language shown on screen. ' +
+        'Put the COMPLETE full working solution in a fenced code block first — not a stub, not tests, not examples.';
+    }
   }
 };
 
